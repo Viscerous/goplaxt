@@ -145,9 +145,11 @@ func api(w http.ResponseWriter, r *http.Request) {
 
 	// re := plexhooks.ParseWebhook([]byte(match[0]))
 
+	client := &trakt.RealTraktClient{}
+
 	if strings.ToLower(re.Account.Title) == user.Username {
 		// FIXME - make everything take the pointer
-		trakt.Handle(re, *user)
+		trakt.Handle(client, re, *user)
 	} else {
 		log.Printf("Plex username %s does not equal %s, skipping", strings.ToLower(re.Account.Title), user.Username)
 	}
