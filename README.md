@@ -1,6 +1,6 @@
 # Plaxt
 
-![amd64](https://github.com/Viscerous/goplaxt/actions/workflows/build-amd64.yml/badge.svg) ![arm7](https://github.com/Viscerous/goplaxt/actions/workflows/build-arm7.yml/badge.svg)
+![All](https://github.com/Viscerous/goplaxt/actions/workflows/build.yml/badge.svg) ![arm7](https://github.com/Viscerous/goplaxt/actions/workflows/build-arm7.yml/badge.svg)
 
 Plex provides webhook integration for all Plex Pass subscribers, and users of their servers. A webhook is a request that the Plex application sends to third party services when a user takes an action, such as watching a movie or episode.
 
