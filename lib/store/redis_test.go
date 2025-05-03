@@ -30,6 +30,7 @@ func TestLoadingUser(t *testing.T) {
 		AccessToken:    "access123",
 		RefreshToken:   "refresh123",
 		TokenExpiresAt: time.Date(2025, 03, 28, 22, 30, 55, 0, time.UTC),
+		Store:          store,
 	})
 	actual, err := json.Marshal(store.GetUser("id123"))
 
