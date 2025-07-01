@@ -26,10 +26,7 @@ Once you have that, creating your container is a snap:
       -e TRAKT_SECRET=<trakt_secret> \
       -e ALLOWED_HOSTNAMES=<your public hostname(s) comma or space seperated> \
       -p 8000:8000 \
-      viscerous/goplaxt:latest
-
-If you are using a Raspberry Pi or other ARM based device, simply use
-`viscerous/goplaxt:latest-arm7`.
+      ghcr.io/viscerous/goplaxt:latest
 
 Then go ahead and start it with:
 
@@ -46,7 +43,7 @@ services:
     - TRAKT_ID=<trakt_id>
     - TRAKT_SECRET=<trakt_secret>
     - ALLOWED_HOSTNAMES=<your public hostname(s) comma or space seperated>
-    image: viscerous/goplaxt
+    image: ghcr.io/viscerous/goplaxt
     ports:
     - 8000:8000
     restart: unless-stopped
