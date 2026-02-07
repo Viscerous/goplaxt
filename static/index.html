@@ -1,120 +1,320 @@
-<html>
-  <head>
-    <title>Plaxt</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-      body {
-        max-width: 800px;
-        margin: 20px auto;
-        padding: 0 15px;
-        font-size: 22px;
-        line-height: 1.4;
-      }
-      a {
-        text-decoration: none;
-        color: #2874A6;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
-      input{
-        width:calc(100% - 1em);
-        font-size:24px;
-        padding:0.5em
-      }
-      pre {
-        font-size: 14px;
-      }
-      .button{
-        color:#fff;
-        background-color:#333;
-        font-size:40px;
-        padding:10px;
-        cursor:pointer
-      }
-      .button:hover {
-        background-color:#222
-      }
-      .button-group{
-        text-align:center;
-        padding:2em
-      }
-      .authform {
-        text-align: center;
-      }
-      .faded {
-        color: #aaa;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="header">
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plaxt - Plex to Trakt Scrobbler</title>
+  <link rel="stylesheet" href="/static/styles.css?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&family=Varela+Round&family=Fira+Code&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div class="container">
+    <header>
       <h1>Plaxt</h1>
-    </div>
+      <div class="subtitle">Scrobble your Plex watches to Trakt automatically</div>
+    </header>
 
-    <p>Plex provides webhook integration for all Plex Pass subscribers, and users of their servers. A webhook is a request that the Plex application sends to third party services when a user takes an action, such as watching a movie or episode.</p>
-    <p>You can ask Plex to send these webhooks to this tool, which will then log those plays in your Trakt account.</p>
-    <p></p>
-    <p>Ready to get started? Simply enter your Plex username, and click the big friendly button.</p>
+    <main>
+      {{if eq .CurrentStep 4}}
+      <!-- DASHBOARD VIEW (Compact) -->
+      <div class="card dashboard-card">
+        <div class="dashboard-header">
+          <div class="user-info">
+            <span class="avatar">{{slice .User.Username 0 1}}</span>
+            <h2>{{if .User.PlexUsername}}{{.User.PlexUsername}}{{else}}{{.User.Username}}{{end}}</h2>
+          </div>
+          <button class="btn-text js-toggle-webhook">Show Webhook</button>
+        </div>
 
-    {{if .Authorized}}
-      <div class="faded">
-        <h3>Step 1: Authorize with Trakt</h3>
-        <p>Nice.</p>
+        <div class="webhook-drawer" style="display: none; margin-bottom: 30px;">
+          <div class="webhook-box">
+            <span class="webhook-url" id="webhook-url">{{.URL}}</span>
+            <button class="copy-btn" onclick="copyWebhook()">Copy</button>
+          </div>
+        </div>
+
+        <form action="/config" method="post" id="preferences-form">
+          <input type="hidden" name="id" value="{{.User.ID}}">
+
+          <input type="hidden" name="plex_username" value="{{.User.PlexUsername}}">
+
+          <div class="settings-grid">
+            <!-- Shows -->
+            <div class="setting-group">
+              <h3>Shows</h3>
+              <div class="checkbox-group">
+                <label class="checkbox-item"><input type="checkbox" name="show_rate" {{if
+                    .User.Config.GetShowRate}}checked{{end}}><span>Ratings</span></label>
+              </div>
+            </div>
+
+            <!-- Seasons -->
+            <div class="setting-group">
+              <h3>Seasons</h3>
+              <div class="checkbox-group">
+                <label class="checkbox-item"><input type="checkbox" name="season_rate" {{if
+                    .User.Config.GetSeasonRate}}checked{{end}}><span>Ratings</span></label>
+              </div>
+            </div>
+
+            <!-- Episodes -->
+            <div class="setting-group">
+              <h3>Episodes</h3>
+              <div class="checkbox-group">
+                <label class="checkbox-item"><input type="checkbox" name="episode_scrobble_start" {{if
+                    .User.Config.GetEpisodeScrobbleStart}}checked{{end}}><span>Start Watching</span></label>
+                <label class="checkbox-item"><input type="checkbox" name="episode_scrobble_stop" {{if
+                    .User.Config.GetEpisodeScrobbleStop}}checked{{end}}><span>Watched</span></label>
+                <label class="checkbox-item"><input type="checkbox" name="episode_rate" {{if
+                    .User.Config.GetEpisodeRate}}checked{{end}}><span>Ratings</span></label>
+                <label class="checkbox-item has-tooltip"><input type="checkbox" name="episode_collection" {{if
+                    .User.Config.GetEpisodeCollection}}checked{{end}}><span>Library</span><span
+                    class="tooltip-text">Episodes in your Plex library will sync to your Trakt library.</span></label>
+              </div>
+            </div>
+
+            <!-- Movies -->
+            <div class="setting-group">
+              <h3>Movies</h3>
+              <div class="checkbox-group">
+                <label class="checkbox-item"><input type="checkbox" name="movie_scrobble_start" {{if
+                    .User.Config.GetMovieScrobbleStart}}checked{{end}}><span>Start Watching</span></label>
+                <label class="checkbox-item"><input type="checkbox" name="movie_scrobble_stop" {{if
+                    .User.Config.GetMovieScrobbleStop}}checked{{end}}><span>Watched</span></label>
+                <label class="checkbox-item"><input type="checkbox" name="movie_rate" {{if
+                    .User.Config.GetMovieRate}}checked{{end}}><span>Ratings</span></label>
+                <label class="checkbox-item has-tooltip"><input type="checkbox" name="movie_collection" {{if
+                    .User.Config.GetMovieCollection}}checked{{end}}><span>Library</span><span
+                    class="tooltip-text">Movies in your Plex library will sync to your Trakt library.</span></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Form Actions Footer -->
+          <div class="form-actions"
+            style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px;">
+            <button type="button" class="btn-text btn-logout js-logout-trigger">Disconnect</button>
+            <button type="submit" id="save-prefs-btn" class="btn btn-large btn-red" disabled>Save Preferences</button>
+          </div>
+        </form>
       </div>
-      <div>
-    {{else}}
-      <h3>Step 1: Authorize with Trakt</h3>
-      <p>This will take you to trakt.tv, then they'll send you back here.</p>
-      <form class="authform js-authform" action="#">
-        <input class="js-username" placeholder="Plex Username"><br><br>
-        <span class="button js-authorize">Authorize</span>
-      </form>
-      <div class="faded">
-    {{end}}
 
-      <h3>Step 2: Configure Plex</h3>
+      <!-- Logout Modal -->
+      <div id="logout-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+          <h3>Disconnect Account</h3>
+          <p>This will erase all account data and you will need to redo the setup from the start.</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-text js-modal-cancel">Cancel</button>
+            <form action="/logout" method="post" class="js-logout-form" style="display:inline;">
+              <button type="submit" class="btn btn-red">Disconnect</button>
+            </form>
+          </div>
+        </div>
+      </div>
 
-      <p>In the Plex settings, find Webhooks. Add a webhook with the following link:</p>
+      {{else if gt .CurrentStep 1}}
+      <!-- WIZARD VIEW (Authenticated) -->
+      <div class="wizard-container">
+        <form action="/config" method="post">
+          <input type="hidden" name="id" value="{{.User.ID}}">
 
-      <pre>
-        {{.URL}}
-      </pre>
+          <!-- Progress Steps -->
+          <div class="progress-steps card" style="margin-bottom: 20px; padding: 20px;">
+            <div class="step-item completed">
+              <span class="step-icon">✓</span>
+              <span class="step-text">Account</span>
+            </div>
+            <div class="step-line {{if or (gt .CurrentStep 2) .User.IsConfigured}}active{{end}}"></div>
+            <div class="step-item {{if gt .CurrentStep 2}}completed{{else}}active{{end}}" id="progress-webhook">
+              <span class="step-icon">{{if gt .CurrentStep 2}}✓{{else}}2{{end}}</span>
+              <span class="step-text">Webhook</span>
+            </div>
+            <div class="step-line {{if or (eq .CurrentStep 3) .User.IsConfigured}}active{{end}}"></div>
+            <div class="step-item {{if .User.IsConfigured}}completed{{else if eq .CurrentStep 3}}active{{end}}"
+              id="progress-config">
+              <span class="step-icon">{{if .User.IsConfigured}}✓{{else}}3{{end}}</span>
+              <span class="step-text">Sync</span>
+            </div>
+          </div>
 
-      <p>Each link is specific to the username you entered in step 1. You can add as many webhooks as you like though, so your shared users can scrobble their plays too!</p>
+          <!-- Step 2: Webhook -->
+          <div class="card wizard-step" id="step-2" {{if ne .CurrentStep 2}}style="display: none;" {{end}}>
+            <div class="wizard-header">
+              <h2><span class="step-indicator">2</span>Connect Plex</h2>
+            </div>
+            <div class="settings-grid">
+              <!-- Plex Username -->
+              <div class="setting-group" style="grid-column: 1 / -1; margin-top: 0;">
+                <h3>Plex Username</h3>
+                <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -10px; margin-bottom: 15px;">
+                  Set if different from Trakt username: <strong>{{.User.Username}}</strong>
+                </p>
+                <div class="copy-input-wrapper">
+                  <label for="plex_username_wizard" class="visually-hidden">Plex Username</label>
+                  <input type="text" id="plex_username_wizard" name="plex_username" value="{{.User.PlexUsername}}"
+                    placeholder="{{.User.Username}}">
+                </div>
+              </div>
 
-      <h3>Step 3: Enjoy</h3>
+              <!-- Webhook URL -->
+              <div class="setting-group" style="grid-column: 1 / -1; margin-top: 20px;">
+                <h3>Plex Webhook</h3>
+                <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -10px; margin-bottom: 15px;">
+                  Copy and add to <strong>Settings > Webhooks</strong> in your Plex Server.
+                </p>
+                <div class="webhook-box" style="margin-top: 0;">
+                  <span class="webhook-url" id="webhook-url-wizard">{{.URL}}</span>
+                  <button type="button" class="copy-btn" onclick="copyWebhookWizard()">Copy</button>
+                </div>
+              </div>
+            </div>
 
-      <p>You're done! Any device, any server, your plays will be logged.</p>
+            <div class="wizard-nav">
+              <div style="flex-grow: 1;"></div>
+              {{if .User.IsConfigured}}
+              <button type="submit" class="btn btn-large btn-red">Finish Setup</button>
+              {{else}}
+              <button type="button" class="btn btn-large btn-red js-next" data-next="step-3">Next</button>
+              {{end}}
+            </div>
+          </div>
 
+          <!-- Step 3: Config -->
+          <div class="card wizard-step" id="step-3" {{if ne .CurrentStep 3}}style="display: none;" {{end}}>
+            <div class="wizard-header">
+              <h2><span class="step-indicator">3</span>Sync Settings</h2>
+            </div>
+            <p>Choose what you want to sync to Trakt. You can configure advanced settings later in the dashboard.</p>
+
+            <div class="settings-grid">
+              <!-- Episodes -->
+              <div class="setting-group">
+                <h3>Episodes</h3>
+                <div class="checkbox-group">
+                  <label class="checkbox-item"><input type="checkbox" name="episode_scrobble_start" checked><span>Start
+                      Watching</span></label>
+                  <label class="checkbox-item"><input type="checkbox" name="episode_scrobble_stop"
+                      checked><span>Watched</span></label>
+                  <label class="checkbox-item"><input type="checkbox" name="episode_rate"
+                      checked><span>Ratings</span></label>
+                </div>
+              </div>
+              <!-- Movies -->
+              <div class="setting-group">
+                <h3>Movies</h3>
+                <div class="checkbox-group">
+                  <label class="checkbox-item"><input type="checkbox" name="movie_scrobble_start" {{if
+                      .User.Config.GetMovieScrobbleStart}}checked{{end}}><span>Start Watching</span></label>
+                  <label class="checkbox-item"><input type="checkbox" name="movie_scrobble_stop" {{if
+                      .User.Config.GetMovieScrobbleStop}}checked{{end}}><span>Watched</span></label>
+                  <label class="checkbox-item"><input type="checkbox" name="movie_rate" {{if
+                      .User.Config.GetMovieRate}}checked{{end}}><span>Ratings</span></label>
+                </div>
+              </div>
+              <!-- Shows & Seasons -->
+              <div class="setting-group">
+                <h3>Shows & Seasons</h3>
+                <div class="checkbox-group">
+                  <label class="checkbox-item"><input type="checkbox" name="show_rate" {{if
+                      .User.Config.GetShowRate}}checked{{end}}><span>Show Ratings</span></label>
+                  <label class="checkbox-item"><input type="checkbox" name="season_rate" {{if
+                      .User.Config.GetSeasonRate}}checked{{end}}><span>Season Ratings</span></label>
+                </div>
+              </div>
+            </div>
+            <div class="wizard-nav">
+              <button type="button" class="btn-text js-back" data-prev="step-2">Back</button>
+              <button type="submit" class="btn btn-large btn-red">Finish Setup</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {{else}}
+      <!-- LANDING / WIZARD STEP 1 (Unauthenticated) -->
+      <div class="wizard-container">
+        <!-- Progress Steps (Step 1 Active) -->
+        <div class="progress-steps card" style="margin-bottom: 20px; padding: 20px;">
+          <div class="step-item active">
+            <span class="step-icon">1</span>
+            <span class="step-text">Account</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item">
+            <span class="step-icon">2</span>
+            <span class="step-text">Webhook</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item">
+            <span class="step-icon">3</span>
+            <span class="step-text">Sync</span>
+          </div>
+        </div>
+
+        <div class="card wizard-step">
+          <div class="wizard-header">
+            <h2><span class="step-indicator">1</span>Get Started</h2>
+          </div>
+
+          <p>Connect your Trakt account to generate your unique Plex webhook.</p>
+
+          <div class="authform">
+            <!-- Username is now fetched from Trakt automatically -->
+            <div style="margin-top: 20px; text-align: center;">
+              <a href="#" target="_blank" class="btn btn-large js-authorise btn-red disabled"
+                style="display: inline-block; text-decoration: none;">Loading...</a>
+            </div>
+          </div>
+        </div>
+      </div>
+  </div>
+
+  <!-- Device Auth Modal -->
+  <div id="device-auth-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="text-align: center; max-width: 450px;">
+      <h3>Connect to Trakt</h3>
+      <p>Please visit the link below and enter the code to authorise Plaxt.</p>
+
+      <div class="code-display-box" style="background: #1a1a1a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <div id="device-code-display"
+          style="font-family: 'Fira Code', monospace; font-size: 2rem; letter-spacing: 5px; color: var(--trakt-red); font-weight: bold; margin-bottom: 10px;">
+          LOADING</div>
+        <button id="copy-code-btn" class="btn-text" style="font-size: 0.9rem;" onclick="copyDeviceCode()">Copy
+          Code</button>
+      </div>
+
+      <a id="device-verify-link" href="#" target="_blank" class="btn btn-large btn-red"
+        style="display: block; width: 100%; box-sizing: border-box; margin-bottom: 15px;">Open Activation Page</a>
+
+      <p style="font-size: 0.9rem; opacity: 0.7;">Waiting for authorisation...</p>
+      <p id="device-auth-error" style="color: var(--trakt-red); display: none; margin-top: 10px; font-weight: bold;">
+      </p>
+
+      <button id="device-auth-cancel" class="btn-text" style="margin-top: 10px;">Cancel</button>
     </div>
+  </div>
+  {{end}}
 
-    <h3>More Options</h3>
+  </main>
 
-    <p>This fork is open source! See the code, along with instructions on hosting your own personal Plaxt on <a href="https://github.com/viscerous/goplaxt">GitHub</a>.</p>
+  <footer class="footer">
+    <p>
+      <a href="https://github.com/viscerous/goplaxt" target="_blank">Open Source on GitHub</a> •
+      Powered by <a href="https://trakt.tv" target="_blank">Trakt</a>
+    </p>
+  </footer>
+  </div>
 
-    <p>Shoutouts to <a href="https://trakt.tv">Trakt</a> for their great API, and to <a href="https://plex.tv/">Plex</a> for killing the plugin directory.</p>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"
+    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="/static/app.js"></script>
+</body>
 
-    <p>Originally made by <a href="https://astandke.com">XanderStrike</a>.</p>
-
-    <script
-    src="https://code.jquery.com/jquery-3.2.1.min.js"
-    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
-    crossorigin="anonymous"></script>
-
-    <script>
-      var authorization_link = "https://trakt.tv/oauth/authorize?client_id={{.ClientID}}&redirect_uri={{.SelfRoot}}/authorize%3fusername=USERNAME&response_type=code";
-
-      $('.js-authorize').click(function() {
-        var username = $('.js-username').val().toLowerCase();
-        window.location = authorization_link.replace('USERNAME', username);
-      });
-
-      $('.js-authform').submit(function(e) {
-        var username = $('.js-username').val().toLowerCase();
-        window.location = authorization_link.replace('USERNAME', username);
-        return false;
-      });
-    </script>
-  </body>
 </html>

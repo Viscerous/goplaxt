@@ -1,10 +1,13 @@
 package trakt
 
 import (
+	"context"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/viscerous/goplaxt/lib/store"
 	"github.com/xanderstrike/plexhooks"
-	"testing"
 )
 
 type MockTraktClient struct {
@@ -12,20 +15,40 @@ type MockTraktClient struct {
 	MakeRequestResponses map[string][]byte
 }
 
-func (m *MockTraktClient) MakeRequest(url string) []byte {
-	args := m.Called(url)
+func (m *MockTraktClient) MakeRequest(ctx context.Context, url string) ([]byte, error) {
+	args := m.Called(ctx, url)
 
 	if resp, ok := m.MakeRequestResponses[url]; ok {
-		return resp
+		return resp, nil
 	}
 
-	return args.Get(0).([]byte)
+	// Safety check for casting
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (m *MockTraktClient) ScrobbleRequest(action string, body []byte, token string) []byte {
-	args := m.Called(action, body, token)
+func (m *MockTraktClient) ScrobbleRequest(ctx context.Context, action string, body []byte, token string) ([]byte, error) {
+	args := m.Called(ctx, action, body, token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
 
-	return args.Get(0).([]byte)
+func (m *MockTraktClient) SyncRequest(ctx context.Context, endpoint string, body []byte, token string) ([]byte, error) {
+	args := m.Called(ctx, endpoint, body, token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+func (m *MockTraktClient) DeleteCheckin(ctx context.Context, token string) error {
+	args := m.Called(ctx, token)
+	return args.Error(0)
 }
 
 func TestFindEpisode(t *testing.T) {
@@ -201,7 +224,6 @@ func TestFindEpisode(t *testing.T) {
             {"type":"show","score":119.65823,"show":{"title":"37 secondes","year":2025,"ids":{"trakt":232082,"slug":"37-secondes","tvdb":460657,"imdb":"tt32228145","tmdb":237811,"tvrage":null}}}
         ]`),
 				"https://api.trakt.tv/shows/232082/seasons?extended=episodes": []byte(`
-
 [{"number":1,"ids":{"trakt":374539,"tvdb":null,"tmdb":362030,"tvrage":null},"episodes":[{"season":1,"number":1,"title":"Episode 1","ids":{"trakt":11658360,"tvdb":null,"imdb":null,"tmdb":4837828,"tvrage":null}},{"season":1,"number":2,"title":"Episode 2","ids":{"trakt":11722088,"tvdb":null,"imdb":null,"tmdb":5322127,"tvrage":null}},{"season":1,"number":3,"title":"Episode 3","ids":{"trakt":11722089,"tvdb":null,"imdb":null,"tmdb":5322128,"tvrage":null}},{"season":1,"number":4,"title":"Episode 4","ids":{"trakt":11722090,"tvdb":null,"imdb":null,"tmdb":5322129,"tvrage":null}},{"season":1,"number":5,"title":"Episode 5","ids":{"trakt":11722092,"tvdb":null,"imdb":null,"tmdb":5322130,"tvrage":null}},{"season":1,"number":6,"title":"Episode 6","ids":{"trakt":11722093,"tvdb":null,"imdb":null,"tmdb":5322131,"tvrage":null}}]}]`),
 			},
 			ExpectedEpisode: Episode{
@@ -224,9 +246,10 @@ func TestFindEpisode(t *testing.T) {
 			client := &MockTraktClient{
 				MakeRequestResponses: c.ApiCallsResponses,
 			}
-			client.On("MakeRequest", mock.Anything)
+			client.On("MakeRequest", mock.Anything, mock.Anything)
 
-			episode := findEpisode(client, c.Payload)
+			episode, err := findEpisode(context.Background(), client, c.Payload)
+			assert.NoError(t, err)
 
 			assert.Equal(t, c.ExpectedEpisode.Title, episode.Title, "Title mismatch")
 			assert.Equal(t, c.ExpectedEpisode.Season, episode.Season, "Season mismatch")
@@ -335,12 +358,84 @@ func TestFindMovie(t *testing.T) {
 			client := &MockTraktClient{
 				MakeRequestResponses: c.ApiCallsResponses,
 			}
-			client.On("MakeRequest", mock.Anything)
+			client.On("MakeRequest", mock.Anything, mock.Anything)
 
-			movie := findMovie(client, c.Payload)
+			movie, err := findMovie(context.Background(), client, c.Payload)
+			assert.NoError(t, err)
+
 			assert.Equal(t, c.ExpectedMovie.Title, movie.Title, "Title mismatch")
 			assert.Equal(t, c.ExpectedMovie.Year, movie.Year, "Year mismatch")
 			assert.Equal(t, c.ExpectedMovie.Ids, movie.Ids, "Ids mismatch")
 		})
 	}
+}
+
+func TestHandleRate(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Rating Update", func(t *testing.T) {
+		mockClient := new(MockTraktClient)
+		tTrue := true
+		user := store.User{AccessToken: "token", Config: store.Config{MovieRate: &tTrue}}
+		pr := plexhooks.PlexResponse{
+			Event: "media.rate",
+			Metadata: plexhooks.Metadata{
+				LibrarySectionType: "movie",
+				Title:              "Inception",
+				Year:               2010,
+				Guid:               "plex://movie/12345",
+			},
+		}
+		full := PlexFullPayload{
+			Metadata: struct {
+				Duration   int64       `json:"duration"`
+				UserRating float64     `json:"userRating"`
+				RawRating  interface{} `json:"rating"`
+			}{
+				UserRating: 8.0,
+			},
+		}
+
+		// Mock Search
+		mockClient.On("MakeRequest", mock.Anything, mock.Anything).Return([]byte(`[{"movie":{"title":"Inception","year":2010,"ids":{"trakt":123}}}]`), nil)
+		// Mock Sync
+		mockClient.On("SyncRequest", mock.Anything, "ratings", mock.Anything, "token").Return([]byte(`{}`), nil)
+
+		err := handleRate(ctx, mockClient, pr, full, user)
+		assert.NoError(t, err)
+		mockClient.AssertExpectations(t)
+	})
+
+	t.Run("Rating Removal", func(t *testing.T) {
+		mockClient := new(MockTraktClient)
+		tTrue := true
+		user := store.User{AccessToken: "token", Config: store.Config{MovieRate: &tTrue}}
+		pr := plexhooks.PlexResponse{
+			Event: "media.rate",
+			Metadata: plexhooks.Metadata{
+				LibrarySectionType: "movie",
+				Title:              "Inception",
+				Year:               2010,
+				Guid:               "plex://movie/12345",
+			},
+		}
+		full := PlexFullPayload{
+			Metadata: struct {
+				Duration   int64       `json:"duration"`
+				UserRating float64     `json:"userRating"`
+				RawRating  interface{} `json:"rating"`
+			}{
+				UserRating: 0.0,
+			},
+		}
+
+		// Mock Search
+		mockClient.On("MakeRequest", mock.Anything, mock.Anything).Return([]byte(`[{"movie":{"title":"Inception","year":2010,"ids":{"trakt":123}}}]`), nil)
+		// Mock Removal Sync
+		mockClient.On("SyncRequest", mock.Anything, "ratings/remove", mock.Anything, "token").Return([]byte(`{}`), nil)
+
+		err := handleRate(ctx, mockClient, pr, full, user)
+		assert.NoError(t, err)
+		mockClient.AssertExpectations(t)
+	})
 }

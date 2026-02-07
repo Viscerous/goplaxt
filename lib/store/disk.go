@@ -1,113 +1,174 @@
 package store
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/peterbourgon/diskv"
+	"sync"
 )
 
-// DiskStore is a storage engine that writes to the disk
-type DiskStore struct{}
+const (
+	keystorePath = "keystore"
+	indexFile    = "usernames.json"
+)
 
-// NewDiskStore will instantiate the disk storage
-func NewDiskStore() *DiskStore {
-	return &DiskStore{}
+// DiskStore is a storage backend using local filesystem with JSON files
+type DiskStore struct {
+	basePath string
+	mu       sync.RWMutex
 }
 
-// Ping will check if the connection works right
-func (s DiskStore) Ping(ctx context.Context) error {
-	// TODO not sure what can fail here
+// NewDiskStore creates a new disk-based storage
+func NewDiskStore() *DiskStore {
+	// Ensure keystore directory exists
+	if err := os.MkdirAll(keystorePath, 0755); err != nil {
+		slog.Error("Failed to create keystore directory", "error", err)
+	}
+	return &DiskStore{basePath: keystorePath}
+}
+
+// Ping verifies the storage is accessible
+func (s *DiskStore) Ping() error {
+	_, err := os.Stat(s.basePath)
+	return err
+}
+
+// WriteUser saves a user to disk as a single JSON file
+func (s *DiskStore) WriteUser(user User) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Marshal user to JSON (Store field excluded via json:"-")
+	data, err := json.MarshalIndent(user, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal user: %w", err)
+	}
+
+	// Write user file atomically
+	userPath := filepath.Join(s.basePath, user.ID+".json")
+	if err := s.atomicWrite(userPath, data); err != nil {
+		return fmt.Errorf("failed to write user file: %w", err)
+	}
+
+	// Update username index
+	if user.Username != "" {
+		if err := s.updateIndex(user.Username, user.ID); err != nil {
+			slog.Warn("Failed to update username index", "error", err)
+		}
+	}
+
 	return nil
 }
 
-// WriteUser will write a user object to disk
-func (s DiskStore) WriteUser(user User) {
-	log.Printf("DiskStore: Writing user: %+v", user) // Add logging
-	s.writeField(user.ID, "username", user.Username)
-	s.writeField(user.ID, "access", user.AccessToken)
-	s.writeField(user.ID, "refresh", user.RefreshToken)
-	s.writeField(user.ID, "expires_at", user.TokenExpiresAt.Format(time.RFC3339)) // Save TokenExpiresAt
-}
+// GetUser loads a user by ID
+func (s *DiskStore) GetUser(id string) *User {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-// GetUser will load a user from disk
-func (s DiskStore) GetUser(id string) *User {
-	un, err := s.readField(id, "username")
+	userPath := filepath.Join(s.basePath, id+".json")
+	data, err := os.ReadFile(userPath)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Debug("Failed to read user file", "id", id, "error", err)
+		}
 		return nil
-	}
-	ac, err := s.readField(id, "access")
-	if err != nil {
-		return nil
-	}
-	re, err := s.readField(id, "refresh")
-	if err != nil {
-		return nil
-	}
-	expiresAtStr, err := s.readField(id, "expires_at")
-	if err != nil {
-		return nil
-	}
-	tokenExpiresAt, _ := time.Parse(time.RFC3339, expiresAtStr)
-
-	user := User{
-		ID:             id,
-		Username:       strings.ToLower(un),
-		AccessToken:    ac,
-		RefreshToken:   re,
-		TokenExpiresAt: tokenExpiresAt,
-		Store:          s, // Updated field name
 	}
 
+	var user User
+	if err := json.Unmarshal(data, &user); err != nil {
+		slog.Error("Failed to unmarshal user", "id", id, "error", err)
+		return nil
+	}
+
+	user.Store = s
 	return &user
 }
 
-func (s DiskStore) DeleteUser(id string) bool {
-	s.eraseField(id, "username")
-	s.eraseField(id, "access")
-	s.eraseField(id, "refresh")
-	s.eraseField(id, "expires_at") // Remove TokenExpiresAt field
+// GetUserByUsername looks up a user by their username
+func (s *DiskStore) GetUserByUsername(username string) *User {
+	s.mu.RLock()
+	index := s.loadIndex()
+	s.mu.RUnlock()
+
+	id, ok := index[strings.ToLower(username)]
+	if !ok {
+		return nil
+	}
+	return s.GetUser(id)
+}
+
+// DeleteUser removes a user and their index entry
+func (s *DiskStore) DeleteUser(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Get user first to remove from index
+	userPath := filepath.Join(s.basePath, id+".json")
+	data, err := os.ReadFile(userPath)
+	if err == nil {
+		var user User
+		if json.Unmarshal(data, &user) == nil && user.Username != "" {
+			s.removeFromIndex(user.Username)
+		}
+	}
+
+	// Delete user file
+	if err := os.Remove(userPath); err != nil && !os.IsNotExist(err) {
+		slog.Error("Failed to delete user file", "id", id, "error", err)
+		return false
+	}
+
 	return true
 }
 
-func (s DiskStore) writeField(id, field, value string) {
-	err := s.write(fmt.Sprintf("%s.%s", id, field), value)
-	if err != nil {
-		panic(err)
+// atomicWrite writes data to a file atomically using a temp file
+func (s *DiskStore) atomicWrite(path string, data []byte) error {
+	tempPath := path + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+		return err
 	}
+	return os.Rename(tempPath, path)
 }
 
-func (s DiskStore) readField(id, field string) (string, error) {
-	return s.read(fmt.Sprintf("%s.%s", id, field))
+// loadIndex reads the username -> ID mapping
+func (s *DiskStore) loadIndex() map[string]string {
+	indexPath := filepath.Join(s.basePath, indexFile)
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return make(map[string]string)
+	}
+
+	var index map[string]string
+	if err := json.Unmarshal(data, &index); err != nil {
+		slog.Warn("Failed to parse username index", "error", err)
+		return make(map[string]string)
+	}
+	return index
 }
 
-func (s DiskStore) eraseField(id, field string) error {
-	d := diskv.New(diskv.Options{
-		BasePath:     "keystore",
-		Transform:    flatTransform,
-		CacheSizeMax: 1024 * 1024,
-	})
-	return d.Erase(fmt.Sprintf("%s.%s", id, field))
+// updateIndex adds or updates a username -> ID mapping
+func (s *DiskStore) updateIndex(username, id string) error {
+	index := s.loadIndex()
+	index[strings.ToLower(username)] = id
+
+	data, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	indexPath := filepath.Join(s.basePath, indexFile)
+	return s.atomicWrite(indexPath, data)
 }
 
-func (s DiskStore) write(key, value string) error {
-	d := diskv.New(diskv.Options{
-		BasePath:     "keystore",
-		Transform:    flatTransform,
-		CacheSizeMax: 1024 * 1024,
-	})
-	return d.Write(key, []byte(value))
-}
+// removeFromIndex removes a username from the index
+func (s *DiskStore) removeFromIndex(username string) {
+	index := s.loadIndex()
+	delete(index, strings.ToLower(username))
 
-func (s DiskStore) read(key string) (string, error) {
-	d := diskv.New(diskv.Options{
-		BasePath:     "keystore",
-		Transform:    flatTransform,
-		CacheSizeMax: 1024 * 1024,
-	})
-	value, err := d.Read(key)
-	return string(value), err
+	data, _ := json.MarshalIndent(index, "", "  ")
+	indexPath := filepath.Join(s.basePath, indexFile)
+	s.atomicWrite(indexPath, data)
 }

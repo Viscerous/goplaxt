@@ -1,8 +1,6 @@
 package store
 
 import (
-	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -10,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLoadingUser(t *testing.T) {
+func TestRedisStore(t *testing.T) {
 	s, err := miniredis.Run()
 	if err != nil {
 		panic(err)
@@ -19,55 +17,61 @@ func TestLoadingUser(t *testing.T) {
 
 	store := NewRedisStore(NewRedisClient(s.Addr(), ""))
 
-	s.HSet("goplaxt:user:id123", "username", "halkeye")
-	s.HSet("goplaxt:user:id123", "access", "access123")
-	s.HSet("goplaxt:user:id123", "refresh", "refresh123")
-	s.HSet("goplaxt:user:id123", "expires_at", "2025-03-28T22:30:55Z")
-
-	expected, err := json.Marshal(&User{
-		ID:             "id123",
-		Username:       "halkeye",
-		AccessToken:    "access123",
-		RefreshToken:   "refresh123",
-		TokenExpiresAt: time.Date(2025, 03, 28, 22, 30, 55, 0, time.UTC),
-		Store:          store,
-	})
-	actual, err := json.Marshal(store.GetUser("id123"))
-
-	assert.EqualValues(t, string(expected), string(actual))
-}
-
-func TestSavingUser(t *testing.T) {
-	s, err := miniredis.Run()
-	if err != nil {
-		panic(err)
+	// Create user with config
+	boolTrue := true
+	config := Config{
+		MovieScrobbleStart:   &boolTrue,
+		MovieScrobbleStop:    &boolTrue,
+		MovieRate:            &boolTrue,
+		EpisodeScrobbleStart: &boolTrue,
+		EpisodeScrobbleStop:  &boolTrue,
+		EpisodeRate:          &boolTrue,
 	}
-	defer s.Close()
 
-	store := NewRedisStore(NewRedisClient(s.Addr(), ""))
-	originalUser := &User{
-		ID:             "id123",
-		Username:       "halkeye",
+	user := User{
+		ID:             "test-id",
+		Username:       "TestUser",
+		PlexUsername:   "PlexTest",
 		AccessToken:    "access123",
 		RefreshToken:   "refresh123",
-		TokenExpiresAt: time.Date(2025, 03, 28, 22, 30, 55, 0, time.UTC),
+		TokenExpiresAt: time.Now().Add(1 * time.Hour).Truncate(time.Second),
+		Config:         config,
 		Store:          store,
 	}
 
-	originalUser.save()
+	// Write user
+	err = store.WriteUser(user)
+	assert.NoError(t, err)
 
-	assert.Equal(t, s.HGet("goplaxt:user:id123", "username"), "halkeye")
-	assert.Equal(t, s.HGet("goplaxt:user:id123", "access"), "access123")
-	assert.Equal(t, s.HGet("goplaxt:user:id123", "refresh"), "refresh123")
-	assert.Equal(t, s.HGet("goplaxt:user:id123", "expires_at"), "2025-03-28T22:30:55Z")
+	// Read user
+	actual := store.GetUser("test-id")
+	assert.NotNil(t, actual)
+	assert.Equal(t, user.ID, actual.ID)
+	assert.Equal(t, user.Username, actual.Username)
+	assert.Equal(t, user.PlexUsername, actual.PlexUsername)
+	assert.True(t, actual.Config.GetMovieScrobbleStart())
+	assert.True(t, actual.Config.GetEpisodeRate())
+	assert.True(t, actual.IsConfigured())
 
-	expected, err := json.Marshal(originalUser)
-	actual, err := json.Marshal(store.GetUser("id123"))
+	// Test GetUserByUsername
+	foundByName := store.GetUserByUsername("TestUser")
+	assert.NotNil(t, foundByName)
+	assert.Equal(t, user.ID, foundByName.ID)
 
-	assert.EqualValues(t, string(expected), string(actual))
+	// Test case insensitivity
+	foundLower := store.GetUserByUsername("testuser")
+	assert.NotNil(t, foundLower)
+	assert.Equal(t, user.ID, foundLower.ID)
+
+	// Test DeleteUser
+	deleted := store.DeleteUser("test-id")
+	assert.True(t, deleted)
+
+	notFound := store.GetUser("test-id")
+	assert.Nil(t, notFound)
 }
 
-func TestPing(t *testing.T) {
+func TestRedisPing(t *testing.T) {
 	s, err := miniredis.Run()
 	if err != nil {
 		panic(err)
@@ -75,5 +79,5 @@ func TestPing(t *testing.T) {
 	defer s.Close()
 
 	store := NewRedisStore(NewRedisClient(s.Addr(), ""))
-	assert.Equal(t, store.Ping(context.TODO()), nil)
+	assert.NoError(t, store.Ping())
 }

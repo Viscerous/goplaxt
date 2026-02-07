@@ -13,7 +13,7 @@ type Ids struct {
 type Show struct {
 	Title string `json:"title"`
 	Year  int    `json:"year"`
-	Ids   Ids
+	Ids   Ids    `json:"ids"`
 }
 
 // ShowSearchResult represents a search result for a show
@@ -56,11 +56,61 @@ type MovieSearchResult struct {
 // ShowScrobbleBody represents the scrobbling status for a show
 type ShowScrobbleBody struct {
 	Episode  Episode `json:"episode"`
-	Progress int     `json:"progress"`
+	Progress float64 `json:"progress"`
 }
 
 // MovieScrobbleBody represents the scrobbling status for a movie
 type MovieScrobbleBody struct {
-	Movie    Movie `json:"movie"`
-	Progress int   `json:"progress"`
+	Movie    Movie   `json:"movie"`
+	Progress float64 `json:"progress"`
+}
+
+// RateBody represents the rating payload to Trakt
+type RateBody struct {
+	Movies   []MovieRating   `json:"movies,omitempty"`
+	Shows    []ShowRating    `json:"shows,omitempty"`
+	Episodes []EpisodeRating `json:"episodes,omitempty"`
+}
+
+type MovieRating struct {
+	Rating int    `json:"rating"`
+	Title  string `json:"title"`
+	Year   int    `json:"year"`
+	Ids    Ids    `json:"ids"`
+}
+
+type ShowRating struct {
+	Rating int    `json:"rating"`
+	Title  string `json:"title"`
+	Year   int    `json:"year"`
+	Ids    Ids    `json:"ids"`
+}
+
+type EpisodeRating struct {
+	Rating  int     `json:"rating"`
+	Episode Episode `json:"episode"`
+}
+
+// CollectionMovie represents a movie for collection sync with collected_at timestamp
+type CollectionMovie struct {
+	Title       string `json:"title"`
+	Year        int    `json:"year"`
+	Ids         Ids    `json:"ids"`
+	CollectedAt string `json:"collected_at,omitempty"`
+}
+
+// CollectionEpisode represents an episode for collection sync with collected_at timestamp
+type CollectionEpisode struct {
+	Season      int    `json:"season"`
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	Ids         Ids    `json:"ids"`
+	CollectedAt string `json:"collected_at,omitempty"`
+}
+
+// CollectionBody represents the collection payload to Trakt
+type CollectionBody struct {
+	Movies   []CollectionMovie   `json:"movies,omitempty"`
+	Shows    []Show              `json:"shows,omitempty"`
+	Episodes []CollectionEpisode `json:"episodes,omitempty"`
 }
