@@ -13,7 +13,7 @@ type Ids struct {
 type Show struct {
 	Title string `json:"title"`
 	Year  int    `json:"year"`
-	Ids   Ids
+	Ids   Ids    `json:"ids"`
 }
 
 // ShowSearchResult represents a search result for a show
@@ -33,6 +33,7 @@ type Episode struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
 	Ids    Ids    `json:"ids"`
+	MediaMetadata
 }
 
 // Season represents a season
@@ -41,11 +42,22 @@ type Season struct {
 	Episodes []Episode
 }
 
+// MediaMetadata representing audio/video technical details
+type MediaMetadata struct {
+	MediaType     string `json:"media_type,omitempty"`
+	Resolution    string `json:"resolution,omitempty"`
+	Audio         string `json:"audio,omitempty"`
+	AudioChannels string `json:"audio_channels,omitempty"`
+	HDR           string `json:"hdr,omitempty"`
+	ThreeD        bool   `json:"3d,omitempty"`
+}
+
 // Movie represents a movie
 type Movie struct {
 	Title string `json:"title"`
 	Year  int    `json:"year"`
 	Ids   Ids    `json:"ids"`
+	MediaMetadata
 }
 
 // MovieSearchResult represents a search result for a movie
@@ -56,11 +68,44 @@ type MovieSearchResult struct {
 // ShowScrobbleBody represents the scrobbling status for a show
 type ShowScrobbleBody struct {
 	Episode  Episode `json:"episode"`
-	Progress int     `json:"progress"`
+	Progress float64 `json:"progress"`
 }
 
 // MovieScrobbleBody represents the scrobbling status for a movie
 type MovieScrobbleBody struct {
-	Movie    Movie `json:"movie"`
-	Progress int   `json:"progress"`
+	Movie    Movie   `json:"movie"`
+	Progress float64 `json:"progress"`
+}
+
+// RateBody represents the rating payload to Trakt
+type RateBody struct {
+	Movies   []MovieRating   `json:"movies,omitempty"`
+	Shows    []ShowRating    `json:"shows,omitempty"`
+	Episodes []EpisodeRating `json:"episodes,omitempty"`
+}
+
+type MovieRating struct {
+	Rating int    `json:"rating"`
+	Title  string `json:"title"`
+	Year   int    `json:"year"`
+	Ids    Ids    `json:"ids"`
+}
+
+type ShowRating struct {
+	Rating int    `json:"rating"`
+	Title  string `json:"title"`
+	Year   int    `json:"year"`
+	Ids    Ids    `json:"ids"`
+}
+
+type EpisodeRating struct {
+	Rating  int     `json:"rating"`
+	Episode Episode `json:"episode"`
+}
+
+// CollectionBody represents the collection payload to Trakt
+type CollectionBody struct {
+	Movies   []Movie   `json:"movies,omitempty"`
+	Shows    []Show    `json:"shows,omitempty"`
+	Episodes []Episode `json:"episodes,omitempty"`
 }

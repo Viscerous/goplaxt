@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch goplaxt",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/main.go",
+            "env": {
+                "TRAKT_ID": "YOUR_TRAKT_CLIENT_ID",
+                "TRAKT_SECRET": "YOUR_TRAKT_CLIENT_SECRET",
+                "ALLOWED_HOSTNAMES": "localhost:8000"
+            }
+        }
+    ]
+}

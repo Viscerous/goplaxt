@@ -1,4 +1,29 @@
-keystore/
+# Binaries and executables
 goplaxt
+goplaxt.exe
+__debug_bin*
+*.exe
+
+# Keystore
+keystore/
+
+# Docker
 goplaxt-docker
+
+# Scripts
 run.sh
+
+# Test Artifacts Folder
+test_output/
+
+# General Test Artifacts
+*.test
+*.log
+diff_output.txt
+test_output.txt
+test_output_ascii.txt
+bin/
+
+
+# IDEs
+.vscode/launch.json
